@@ -2,6 +2,7 @@ use std::io;
 use std::rc::Rc;
 use wesh::cli::*;
 
+/// main enters the shell
 fn main() {
     let mut r = cli::Registry::new(); 
     let entry = Rc::new(cli::ConfigBranch::new(None, ">", "oper"));
