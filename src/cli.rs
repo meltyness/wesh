@@ -35,9 +35,8 @@ pub mod cli {
     }
 
     /// Directives are commands
-    pub trait Directive {
-
-    }
+    pub trait Directive { }
+    impl Directive for ConfigBranch { }
 
     /// All Directives must be registered
     pub struct Registry {
@@ -49,6 +48,10 @@ pub mod cli {
             Registry {
                 known_directives: vec![],
             }
+        }
+
+        pub fn add(&mut self, c: Rc<dyn Directive>) {
+            self.known_directives.push(Some(c));
         }
     }
 }

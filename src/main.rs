@@ -1,9 +1,14 @@
 use std::io;
+use std::rc::Rc;
 use wesh::cli::*;
 
 fn main() {
-    let entry = cli::ConfigBranch::new(None, ">", "oper");
-    
+    let mut r = cli::Registry::new(); 
+    let entry = Rc::new(cli::ConfigBranch::new(None, ">", "oper"));
+    let exit = Rc::new(cli::MetaCommand::new(None, "exit")); 
+    let cur = entry.clone()
+
+    r.add(entry.clone());
     let mut input = String::new();
     loop {
         entry.print_sig();
