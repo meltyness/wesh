@@ -1,12 +1,7 @@
+/// The CLI module broadly contains structures organizing the CLI.
 pub mod cli {
-    use std::cell::RefMut;
     use std::io::Write;
     use std::rc::{Rc, Weak};
-
-    pub struct ShellState {
-        pub r: Registry,
-        pub cur: Rc<ConfigBranch>,
-    }
 
     /// ConfigBranches compose the tree-structure of the shell
     ///
@@ -15,12 +10,10 @@ pub mod cli {
     /// The program exits if you issue an "exit" while you are in the entry branch
     #[derive(Debug)]
     pub struct ConfigBranch {
-        /// If applicable, the parent Configuration branch
         pub parent: Option<Weak<ConfigBranch>>,
-        /// The prefix displayed on the commandline, when in this branch
         pub display: String,
-        /// The command-string typed to enter this specific
         pub command_str: String,
+        pub brief: String,
     }
 
     impl ConfigBranch {
@@ -33,22 +26,26 @@ pub mod cli {
             parent: Option<Weak<ConfigBranch>>,
             display: &str,
             command_str: &str,
+            brief: &str,
         ) -> ConfigBranch {
             ConfigBranch {
                 parent: parent,
                 display: String::from(display),
                 command_str: String::from(command_str),
+                brief: String::from(brief),
             }
         }
     }
 
     /// MetaCommands exist regardless of the branch level you're at
     ///
-    /// An example is exit defined as follows
+    /// # Example
     /// command_str: "exit"
     /// brief: "Exits the current branch"
-    /// action: actually just exits the program, but needs to make this determination based on
-    /// current hierarchical level, which would be gleaned from a borrow from the Register.
+    /// action: receives a closure that, regardless of ShellState, terminates the process.
+    /// ```
+    /// { |_shell| process::exit(0) }
+    /// ```
     pub struct MetaCommand {
         command_str: String,
         brief: String,
@@ -70,10 +67,14 @@ pub mod cli {
     }
 
     use std::any::Any;
-    /// Directives are commands
+    /// Both MetaCommands and ConfigBranches may be used as directives to the shell.
+    ///
+    /// This provides a common interface for the Registry to determine command
+    /// applicability, and report back to the main thread.
     pub trait Directive: Any {
         fn get_cmd<'a>(&'a self) -> &'a str;
         fn get_state_message<'a>(&'a self, d: Rc<dyn Any>) -> StateMessage;
+        fn get_brief<'a>(&'a self) -> &'a str;
         fn as_any_rc(self: Rc<Self>) -> Rc<dyn Any>;
     }
 
@@ -81,9 +82,15 @@ pub mod cli {
         fn get_cmd<'a>(&'a self) -> &'a str {
             &*self.command_str
         }
+
         fn get_state_message<'a>(&'a self, d: Rc<dyn Any>) -> StateMessage {
             StateMessage::StateMove(d.downcast::<ConfigBranch>().unwrap())
         }
+
+        fn get_brief<'a>(&'a self) -> &'a str {
+            &*self.brief
+        }
+
         fn as_any_rc(self: Rc<Self>) -> Rc<dyn Any> {
             self
         }
@@ -93,8 +100,13 @@ pub mod cli {
         fn get_cmd<'a>(&'a self) -> &'a str {
             &*self.command_str
         }
+
         fn get_state_message<'a>(&'a self, d: Rc<dyn Any>) -> StateMessage {
             StateMessage::RunFunction(d.downcast::<MetaCommand>().unwrap())
+        }
+
+        fn get_brief<'a>(&'a self) -> &'a str {
+            &*self.brief
         }
 
         fn as_any_rc(self: Rc<Self>) -> Rc<dyn Any> {
@@ -102,17 +114,18 @@ pub mod cli {
         }
     }
 
+    /// This enum provides separation between prescribed action, and type.
     pub enum StateMessage {
         StateMove(Rc<ConfigBranch>),
         RunFunction(Rc<MetaCommand>),
-        DoNothing,
+        UnknownCommand,
     }
 
     /// All Directives must be registered
     ///
     /// For a given string, the registry has methods to determine what action to take.
     pub struct Registry {
-        known_directives: Vec<Rc<dyn Directive>>,
+        pub known_directives: Vec<Rc<dyn Directive>>,
     }
 
     impl Registry {
@@ -133,15 +146,13 @@ pub mod cli {
                     return d.get_state_message(d_a);
                 }
             }
-            println!("Unknown command, `{}`", input);
-            self.dump_commands();
-            StateMessage::DoNothing
+            StateMessage::UnknownCommand
         }
+    }
 
-        pub fn dump_commands(&self) {
-            for d in &self.known_directives {
-                println!("known command: {}", d.get_cmd());
-            }
-        }
+    /// The ShellState contains details about the Shell as presented to the user.
+    pub struct ShellState {
+        pub r: Registry,
+        pub cur: Rc<ConfigBranch>,
     }
 }
