@@ -1,6 +1,12 @@
 pub mod cli {
+    use std::cell::RefMut;
     use std::io::Write;
     use std::rc::{Rc, Weak};
+
+    pub struct ShellState {
+        pub r: Registry,
+        pub cur: Rc<ConfigBranch>,
+    }
 
     /// ConfigBranches compose the tree-structure of the shell
     ///
@@ -10,11 +16,11 @@ pub mod cli {
     #[derive(Debug)]
     pub struct ConfigBranch {
         /// If applicable, the parent Configuration branch
-        parent: Option<Weak<ConfigBranch>>,
+        pub parent: Option<Weak<ConfigBranch>>,
         /// The prefix displayed on the commandline, when in this branch
-        display: String,
+        pub display: String,
         /// The command-string typed to enter this specific
-        command_str: String,
+        pub command_str: String,
     }
 
     impl ConfigBranch {
@@ -43,15 +49,18 @@ pub mod cli {
     /// brief: "Exits the current branch"
     /// action: actually just exits the program, but needs to make this determination based on
     /// current hierarchical level, which would be gleaned from a borrow from the Register.
-    #[derive(Debug)]
     pub struct MetaCommand {
         command_str: String,
         brief: String,
-        pub action: fn(i32) -> !,
+        pub action: Box<dyn Fn(&mut ShellState)>,
     }
 
     impl MetaCommand {
-        pub fn new(command_str: &str, brief: &str, action: fn(i32) -> !) -> MetaCommand {
+        pub fn new(
+            command_str: &str,
+            brief: &str,
+            action: Box<dyn Fn(&mut ShellState)>,
+        ) -> MetaCommand {
             MetaCommand {
                 command_str: String::from(command_str),
                 brief: String::from(brief),
@@ -93,7 +102,6 @@ pub mod cli {
         }
     }
 
-    #[derive(Debug)]
     pub enum StateMessage {
         StateMove(Rc<ConfigBranch>),
         RunFunction(Rc<MetaCommand>),
