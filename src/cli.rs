@@ -1,8 +1,12 @@
+pub use self::cli::initalize_shell;
+pub use self::cli::StateMessage;
+
 /// The CLI module broadly contains structures organizing the CLI.
 pub mod cli {
     use std::io::Write;
+    use std::process;
     use std::rc::{Rc, Weak};
-
+    use crate::from_netlink::from_netlink;
     /// ConfigBranches compose the tree-structure of the shell
     ///
     /// Upon entering the shell you are dumped into the entry branch
@@ -154,5 +158,77 @@ pub mod cli {
     pub struct ShellState {
         pub r: Registry,
         pub cur: Rc<ConfigBranch>,
+    }
+
+    /// This initializes the shell, and returns the value to the main CLI loop
+    /// The entry config branch is set as operational mode
+    ///
+    /// | Name                   | Command       | Available Child commands|
+    /// |------------------------|---------------|-------------------------|
+    /// |Operational Mode        | ```oper ..``` |   ```conf```            |
+    /// |Configuration mode      | ```conf ..``` |   None                  |
+    /// |Up                      | ```up```      |   None                  |
+    /// |Exit                    | ```exit```    |   None                  |
+    /// |Context-sensitive help  | ```?```       |   None                  |
+    pub fn initalize_shell() -> ShellState {
+        let entry = Rc::new(ConfigBranch::new(
+            None,
+            ">",
+            "oper",
+            "Enter operational mode",
+        ));
+
+        let config = Rc::new(ConfigBranch::new(
+            Some(Rc::downgrade(&entry.clone())),
+            "#",
+            "conf",
+            "Enter global Configuration mode",
+        ));
+
+        let show = Rc::new(MetaCommand::new(
+            "show",
+            "Displays configuration information",
+            Box::new(|_shell| from_netlink::get_route_table().expect("bad thing"))
+            )
+        );
+
+        let exit = Rc::new(MetaCommand::new(
+            "exit",
+            "Exits the current branch",
+            Box::new(|_shell| process::exit(0)),
+        ));
+
+        let up = Rc::new(MetaCommand::new(
+            "up",
+            "Exits the current branch",
+            Box::new(|shell| match &shell.cur.parent {
+                None => process::exit(0),
+                Some(b) => shell.cur = b.upgrade().unwrap(),
+            }),
+        ));
+
+        let csh = Rc::new(MetaCommand::new(
+            "?",
+            "Requests a copy of the description of all directives",
+            Box::new(|shell| {
+                for d in &shell.r.known_directives {
+                    println!("{} - {}", d.get_cmd(), d.get_brief());
+                }
+            }),
+        ));
+
+        let mut shell_state = ShellState {
+            r: Registry::new(),
+            cur: entry.clone(),
+        };
+
+        shell_state.r.add(entry.clone());
+        shell_state.r.add(config.clone());
+        shell_state.r.add(show.clone());
+        shell_state.r.add(exit.clone());
+        shell_state.r.add(up.clone());
+        shell_state.r.add(csh.clone());
+
+        shell_state
     }
 }

@@ -6,4 +6,7 @@
 //! an operationally-minded, simple to understand, robust networking shell to the backend
 //! Operating System.
 
+#![warn(missing_docs)]
+
 pub mod cli;
+pub mod from_netlink;
